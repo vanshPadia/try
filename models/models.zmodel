@@ -1,0 +1,202 @@
+enum UserStatus {
+    INVITED
+    VERIFIED
+}
+
+model User {
+    id                String             @id @default(uuid())
+    name              String?
+    email             String?            @unique
+    pictureUrl        String?            @default('https://i.imgur.com/ZdJSK3Y.jpeg')
+    tokenInvitation   String?
+
+    stripeCustomerId  String?
+
+    status            UserStatus         @default(VERIFIED)
+
+    // this is the role of the user for the application
+    globalRole        String             @default('USER')
+    password          String?            @password @omit
+    dateCreated       DateTime           @default(now())
+    dateUpdated       DateTime           @updatedAt @default(now())
+
+    organizationRoles OrganizationRole[]
+
+    pwaSubscriptions  PwaSubscription[]  @relation("user")
+
+    notebooks         Notebook[]         @relation("user")
+    boards            Board[]            @relation("user")
+    tasksAsAssignee   Task[]             @relation("assignee")
+    notifications     Notification[]     @relation("user")
+
+    @@auth()
+    @@allow("all", auth().id == this.id)
+    @@allow('all', auth().globalRole == 'ADMIN')
+
+    //we only allow that user to register if they don't create an admin role
+    @@allow("create", globalRole != 'ADMIN')
+    @@allow("read", true)
+}
+
+model Media {
+
+    id          String      @id @default(uuid())
+    mediaUrl    String?
+    type        String?
+
+    noteMedias  NoteMedia[] @relation("media")
+    taskMedias  TaskMedia[] @relation("media")
+    dateCreated DateTime    @default(now())
+    dateUpdated DateTime    @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Notebook {
+
+    id          String   @id @default(uuid())
+    name        String?
+    description String?
+
+    userId      String
+    user        User?    @relation(fields: [userId], references: [id], name: "user")
+
+    notes       Note[]   @relation("notebook")
+    dateCreated DateTime @default(now())
+    dateUpdated DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Board {
+
+    id          String   @id @default(uuid())
+    name        String?
+    description String?
+
+    userId      String
+    user        User?    @relation(fields: [userId], references: [id], name: "user")
+
+    tasks       Task[]   @relation("board")
+    dateCreated DateTime @default(now())
+    dateUpdated DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Note {
+
+    id          String      @id @default(uuid())
+    title       String?
+    content     String?
+
+    notebookId  String
+    notebook    Notebook?   @relation(fields: [notebookId], references: [id], name: "notebook")
+
+    noteMedias  NoteMedia[] @relation("note")
+    dateCreated DateTime    @default(now())
+    dateUpdated DateTime    @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Task {
+
+    id          String      @id @default(uuid())
+    title       String?
+    description String?
+    status      String?
+
+    boardId     String
+    board       Board?      @relation(fields: [boardId], references: [id], name: "board")
+    assigneeId  String?
+    assignee    User?       @relation(fields: [assigneeId], references: [id], name: "assignee")
+
+    taskMedias  TaskMedia[] @relation("task")
+    dateCreated DateTime    @default(now())
+    dateUpdated DateTime    @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Notification {
+
+    id          String   @id @default(uuid())
+    content     String?
+    isRead      Boolean
+
+    userId      String
+    user        User?    @relation(fields: [userId], references: [id], name: "user")
+
+    dateCreated DateTime @default(now())
+    dateUpdated DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model NoteMedia {
+
+    noteId      String
+    note        Note?    @relation(fields: [noteId], references: [id], name: "note")
+    mediaId     String
+    media       Media?   @relation(fields: [mediaId], references: [id], name: "media")
+    id          String   @id @default(uuid())
+
+    dateCreated DateTime @default(now())
+    dateUpdated DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model TaskMedia {
+
+    taskId      String
+    task        Task?    @relation(fields: [taskId], references: [id], name: "task")
+    mediaId     String
+    media       Media?   @relation(fields: [mediaId], references: [id], name: "media")
+    id          String   @id @default(uuid())
+
+    dateCreated DateTime @default(now())
+    dateUpdated DateTime @updatedAt @default(now())
+    @@allow("all", true)
+}
+
+model Organization {
+    id               String             @id @default(uuid())
+    name             String
+    pictureUrl       String?            @default('https://i.imgur.com/BgkFiid.jpeg')
+
+    stripeCustomerId String?
+
+    dateCreated      DateTime           @default(now())
+    dateUpdated      DateTime           @updatedAt @default(now())
+    roles            OrganizationRole[]
+
+    @@allow('all', auth().globalRole == 'ADMIN')
+    @@allow('all', roles?[user == auth() && name == 'owner'])
+    @@allow('read', roles?[user == auth()])
+}
+
+model OrganizationRole {
+    id             String       @id @default(uuid())
+    name           String
+    dateCreated    DateTime     @default(now())
+    dateUpdated    DateTime     @updatedAt @default(now())
+
+    userId         String       @default(auth().id)
+    user           User         @relation(fields: [userId], references: [id])
+    organizationId String
+    organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+    @@allow('all', auth().globalRole == 'ADMIN')
+    @@allow('all', organization.roles?[user == auth() && name == 'owner'])
+    @@allow('create', organization.roles?[user == auth()] && name != 'owner')
+    @@allow('read', organization.roles?[user == auth()])
+    @@allow('delete', auth() == user)
+}
+
+model PwaSubscription {
+    id          String   @id @default(uuid())
+    content     String
+    dateCreated DateTime @default(now())
+    dateUpdated DateTime @updatedAt @default(now())
+
+    userId      String   @default(auth().id)
+    user        User     @relation(fields: [userId], references: [id], name: 'user')
+
+    @@allow("all", true)
+}
+
